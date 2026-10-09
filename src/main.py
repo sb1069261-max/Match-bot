@@ -28,9 +28,9 @@ bot = telebot.TeleBot(TOKEN)
 def get_today_matches():
     url = "https://api.football-data.org/v4/matches"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
-    today = datetime.now().strftime("%Y-%m-%d")
-    future = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
-    params = {"dateFrom": today, "dateTo": future}
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    future = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    params = {"dateFrom": yesterday, "dateTo": future}
     
     try:
         response = requests.get(url, headers=headers, params=params)
@@ -38,12 +38,11 @@ def get_today_matches():
             data = response.json()
             matches = data.get("matches", [])
             result = []
-            for m in matches[:6]:
+            for m in matches[:8]:
                 home = m['homeTeam']['name']
                 away = m['awayTeam']['name']
                 competition = m['competition']['name']
                 match_id = m['id']
-                match_date = m['utcDate'].split('T')[0]
                 status = m['status']
                 
                 status_icon = "🕒"
@@ -57,7 +56,6 @@ def get_today_matches():
                     "home": home,
                     "away": away,
                     "competition": competition,
-                    "date": match_date,
                     "status": status,
                     "text": f"{status_icon} {home} vs {away}"
                 })
@@ -96,7 +94,7 @@ def callback_query(call):
                 for m in matches:
                     markup.add(types.InlineKeyboardButton(m["text"], callback_data=f"match_{m['id']}"))
             else:
-                markup.add(types.InlineKeyboardButton("Brak meczów w bazie", callback_data="back_to_menu"))
+                markup.add(types.InlineKeyboardButton("🔄 Odśwież / Szukaj ponownie", callback_data="analyze_menu"))
                 
             markup.add(types.InlineKeyboardButton("⬅️ Powrót do menu", callback_data="back_to_menu"))
             
@@ -110,12 +108,11 @@ def callback_query(call):
             
         elif call.data.startswith("match_"):
             match_id = call.data.replace("match_", "")
-            
             match_url = f"https://api.football-data.org/v4/matches/{match_id}"
             headers = {"X-Auth-Token": FOOTBALL_API_KEY}
             
             home, away, comp = "Gospodarz", "Gość", "Rozgrywki"
-            live_score_text = "🕒 Mecz w trakcie przygotowania"
+            live_score_text = "🕒 Mecz oczekuje na start"
             
             try:
                 resp = requests.get(match_url, headers=headers)
@@ -128,26 +125,22 @@ def callback_query(call):
                     score = m_data.get('score', {}) or {}
                     
                     full_time = score.get('fullTime', {}) or {}
-                    h_goals = full_time.get('home', 0)
-                    a_goals = full_time.get('away', 0)
+                    h_goals = full_time.get('home')
+                    a_goals = full_time.get('away')
                     
                     if status in ["LIVE", "IN_PLAY", "PAUSED"]:
                         reg_time = score.get('regularTime', {}) or {}
                         hg = reg_time.get('home') if reg_time.get('home') is not None else (h_goals if h_goals is not None else 0)
                         ag = reg_time.get('away') if reg_time.get('away') is not None else (a_goals if a_goals is not None else 0)
-                        live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}` (Status: {status})"
+                        minute_info = f" (Status: {status})"
+                        live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}`{minute_info}"
                     elif status == "FINISHED":
-                        live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {h_goals or 0} : {a_goals or 0} {away}`"
+                        live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {h_goals if h_goals is not None else 0} : {a_goals if a_goals is not None else 0} {away}`"
                     else:
                         match_date = m_data.get('utcDate', '').split('T')[0]
                         live_score_text = f"🕒 *Status:* Zaplanowany na {match_date}"
-                else:
-                    matches = get_today_matches()
-                    selected = next((m for m in matches if m["id"] == match_id), None)
-                    if selected:
-                        home, away, comp = selected["home"], selected["away"], selected["competition"]
             except Exception as inner_err:
-                print(f"Match fetch detail error: {inner_err}")
+                print(f"Match detail error: {inner_err}")
 
             seed = hash(home + away)
             random.seed(seed)
@@ -170,18 +163,17 @@ def callback_query(call):
             
             main_bet = f"{home} wygra lub Remis (1X) + Powyżej 1.5 gola" if prob_home >= prob_away else f"{away} wygra lub Remis (X2) + Powyżej 1.5 gola"
             odds_main = round(random.uniform(1.55, 1.95), 2)
-            
             recommendation = f"OBSTAWIAJ: {home} (Kurs sypie value)" if prob_home > prob_away else f"OBSTAWIAJ: Remis lub {away}"
             
             analysis_text = (
                 f"💎 *RAPORT LIVE & VIP: {home} vs {away}* 💎\n"
                 f"🏆 *Rozgrywki:* {comp}\n\n"
                 f"📊 {live_score_text}\n\n"
-                f"📈 *Szanse statystyczne (xG):*\n"
-                f"• Gospodarz ({home}): {home_status}\n"
+                f"📈 *Szacowane szanse drużyn:*\n"
+                f"• {home}: {home_status}\n"
                 f"• Remis: *{prob_draw}%*\n"
-                f"• Gość ({away}): {away_status}\n\n"
-                f"📈 *Oczekiwane gole (xG):* Gospodarz: *{xg_home}* | Gość: *{xg_away}*\n\n"
+                f"• {away}: {away_status}\n\n"
+                f"📈 *Oczekiwane gole (xG):* {home}: *{xg_home}* | {away}: *{xg_away}*\n\n"
                 f"🎯 *REKOMENDACJA NA KUPON (Betclic):*\n"
                 f"👉 `{main_bet}`\n"
                 f"💰 *Szacowany kurs:* `{odds_main}`\n"
@@ -203,7 +195,7 @@ def callback_query(call):
                     reply_markup=markup
                 )
             except Exception as edit_err:
-                print(f"Edit msg error (Ignored): {edit_err}")
+                print(f"Edit error: {edit_err}")
             
         elif call.data == "check_slip":
             markup = types.InlineKeyboardMarkup()
@@ -219,13 +211,7 @@ def callback_query(call):
                 "Rekomendowana stawka: *5% budżetu*\n\n"
                 "✍️ *Analiza by Hrabia*"
             )
-            bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=slip_text,
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
+            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=slip_text, parse_mode="Markdown", reply_markup=markup)
             
         elif call.data == "stats":
             markup = types.InlineKeyboardMarkup()
@@ -239,13 +225,7 @@ def callback_query(call):
                 "🟢 *Status algorytmu:* Pełna gotowość analityczna.\n\n"
                 "✍️ *Analiza by Hrabia*"
             )
-            bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=stats_text,
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
+            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=stats_text, parse_mode="Markdown", reply_markup=markup)
             
         elif call.data == "back_to_menu":
             markup = types.InlineKeyboardMarkup(row_width=1)
@@ -257,7 +237,7 @@ def callback_query(call):
             bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
-                text="🤖 *PRO BET ANALYZER v3.2 (LIVE & VIP)* 🤖\n\nWybierz opcję poniżej:",
+                text="🤖 *VIP Bet by Hrabia (LIVE & VIP)* 🤖\n\nWybierz opcję poniżej:",
                 parse_mode="Markdown",
                 reply_markup=markup
             )
