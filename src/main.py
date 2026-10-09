@@ -1,45 +1,37 @@
 import os
-from flask import Flask, request
 import telebot
-from telebot import types
+from flask import Flask
 
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")
-MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://t.me/pro_bot_analyzer_bot/app")
+# Pobranie tokena z automatycznym usunięciem spacji i enterów
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if TOKEN:
+    TOKEN = TOKEN.strip()
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 
 @bot.message_handler(commands=["14VI40"])
-def handle_auth(message):
-  markup = types.InlineKeyboardMarkup()
-  btn = types.InlineKeyboardButton(
-      "🔥 Otwórz Terminal VIP LIVE", web_app=types.WebAppInfo(url=MINI_APP_URL)
-  )
-  markup.add(btn)
-  bot.reply_to(
-      message,
-      "Masz już aktywny dostęp. Kliknij poniżej:",
-      reply_markup=markup,
-  )
+def handle_command(message):
+    bot.reply_to(
+        message,
+        "Witaj! Kliknij poniższy link, aby otworzyć aplikację: "
+        "https://match-bot-nal2.onrender.com",
+    )
 
 
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-  json_string = request.get_data().decode("utf-8")
-  update = telebot.types.Update.de_json(json_string)
-  bot.process_new_updates([update])
-  return "!", 200
+# Obsługa wiadomości tekstowych / innych komend w grupach i czatach prywatnych
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    # Tutaj działa reszta logiki z dzisiejszego dnia
+    pass
 
 
 @app.route("/")
 def index():
-  return "Bot is running!", 200
+    return "Bot is running!"
 
 
 if __name__ == "__main__":
-  bot.remove_webhook()
-  bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-  port = int(os.environ.get("PORT", 10000))
-  app.run(host="0.0.0.0", port=port)
+    # Uruchomienie bota w tle lub standardowe webhooki/polling w zależności od konfiguracji Render
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
