@@ -1,9 +1,26 @@
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
 
-# Twój zaktualizowany token bota
-TOKEN = 8921204127:AAFMrlmyxwEYnzI13Cypi1KpsGAjFLMd29M
+# Prosty serwer HTTP dla Render (żeby spełnić wymagania portu)
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
+
+# Uruchomienie serwera HTTP w osobnym wątku
+threading.Thread(target=run_http_server, daemon=True).start()
+
+# Twój nowy token bota
+TOKEN = '8921204127:AAFMrlmyxwEYnzI13Cypi1KpsGAjFLMd29M'
 CHANNEL_USERNAME = '@Bot_vip'  # Nazwa grupy
 
 bot = telebot.TeleBot(TOKEN)
