@@ -1,182 +1,45 @@
 import os
-import threading
-from flask import Flask, render_template_string
+from flask import Flask, request
 import telebot
 from telebot import types
 
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")
+MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://t.me/pro_bot_analyzer_bot/app")
+
+bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
-bot = telebot.TeleBot(TOKEN)
 
-SECRET_PASSWORD = "/14VI40"
+@bot.message_handler(commands=["14VI40"])
+def handle_auth(message):
+  markup = types.InlineKeyboardMarkup()
+  btn = types.InlineKeyboardButton(
+      "🔥 Otwórz Terminal VIP LIVE", web_app=types.WebAppInfo(url=MINI_APP_URL)
+  )
+  markup.add(btn)
+  bot.reply_to(
+      message,
+      "Masz już aktywny dostęp. Kliknij poniżej:",
+      reply_markup=markup,
+  )
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VIP Bet by Hrabia</title>
-    <style>
-        body { background-color: #0d1117; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 15px; }
-        h2 { text-align: center; color: #e53935; text-transform: uppercase; font-size: 20px; margin-bottom: 5px; }
-        .subtitle { text-align: center; color: #8c959f; font-size: 12px; margin-bottom: 20px; }
-        .tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
-        .tab { background: #21262d; border: none; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; font-weight: bold; }
-        .tab.active { background: #e53935; }
-        .match-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 12px; cursor: pointer; }
-        .match-header { display: flex; justify-content: space-between; font-size: 11px; color: #8c959f; margin-bottom: 8px; }
-        .live-badge { background: #e53935; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .teams-score { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
-        .score-box { background: #21262d; padding: 4px 10px; border-radius: 6px; font-family: monospace; color: #f0f6fc; }
-        .odds-container { display: flex; gap: 6px; }
-        .odd-btn { flex: 1; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 6px; text-align: center; color: #fff; font-size: 12px; }
-        .odd-value { color: #f1e05a; font-weight: bold; font-size: 13px; }
-        .view-section { display: none; }
-        .view-section.active { display: block; }
-        .back-btn { background: #30363d; border: none; color: white; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; cursor: pointer; font-size: 13px; }
-        .analysis-box { background: #161b22; border-radius: 12px; padding: 15px; border: 1px solid #30363d; }
-    </style>
-</head>
-<body>
-    <h2>🔥 Terminal VIP Live</h2>
-    <div class="subtitle">Strefa Klubu VIP</div>
-    <div id="main-menu" class="view-section active">
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('today')">🔴 Mecze Dziś (LIVE)</button>
-            <button class="tab" onclick="switchTab('tomorrow')">📅 Mecze Jutro</button>
-            <button class="tab" onclick="switchTab('slip')">💡 Generator AKO</button>
-        </div>
-        <div id="matches-list"></div>
-    </div>
-    <div id="match-detail" class="view-section">
-        <button class="back-btn" onclick="backToMenu()">⬅️ Powrót</button>
-        <div class="analysis-box" id="detail-content"></div>
-    </div>
-    <div id="slip-view" class="view-section">
-        <button class="back-btn" onclick="backToMenu()">⬅️ Powrót</button>
-        <div class="analysis-box">
-            <h3>💡 PEWNY KUPON AKO DNIA (VIP)</h3>
-            <p>1️⃣ <b>FC Barcelona vs Real Madryt</b><br>Typ: <code>1X</code> | Kurs: <b>1.48</b></p>
-            <p>2️⃣ <b>Manchester City vs Arsenal</b><br>Typ: <code>Powyżej 1.5</code> | Kurs: <b>1.28</b></p>
-            <hr style="border-color: #30363d;">
-            <p>💰 <b>Łączny kurs AKO:</b> <span style="color: #f1e05a; font-size: 16px;">1.89</span></p>
-        </div>
-    </div>
-    <script>
-        let currentTab = 'today';
-        const mockMatches = {
-            today: [
-                { id: 1, home: "Sporting Braga", away: "Sporting Lizbona", comp: "Liga Betclic", minute: 70, hg: 1, ag: 1, oh: 5.00, od: 1.88, oa: 2.70 },
-                { id: 2, home: "Borussia Dortmund", away: "Werder Brema", comp: "Bundesliga", minute: 90, hg: 2, ag: 2, oh: 10.50, od: 1.04, oa: 20.0 }
-            ],
-            tomorrow: [
-                { id: 3, home: "Arsenal", away: "Chelsea", comp: "Premier League", minute: 0, hg: 0, ag: 0, oh: 2.10, od: 3.40, oa: 3.30 }
-            ]
-        };
-        setInterval(() => {
-            mockMatches.today.forEach(m => { if (m.minute > 0 && m.minute < 90) m.minute += 1; });
-            if (document.getElementById('main-menu').classList.contains('active')) renderMatches();
-        }, 10000);
-        function switchTab(tab) {
-            if(tab === 'slip') {
-                document.getElementById('main-menu').classList.remove('active');
-                document.getElementById('match-detail').classList.remove('active');
-                document.getElementById('slip-view').classList.add('active');
-                return;
-            }
-            currentTab = tab;
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            renderMatches();
-        }
-        function renderMatches() {
-            const list = document.getElementById('matches-list');
-            list.innerHTML = '';
-            (mockMatches[currentTab] || []).forEach(m => {
-                let statusText = m.minute > 0 ? `<span class="live-badge">🔴 LIVE (${m.minute}')</span>` : `<span style="color:#8c959f;">⏳ Zaplanowany</span>`;
-                let card = document.createElement('div');
-                card.className = 'match-card';
-                card.onclick = () => showDetail(m);
-                card.innerHTML = `
-                    <div class="match-header"><span>${m.comp}</span>${statusText}</div>
-                    <div class="teams-score"><span>${m.home} vs ${m.away}</span><div class="score-box">${m.hg} : ${m.ag}</div></div>
-                    <div class="odds-container">
-                        <div class="odd-btn">1: <span class="odd-value">${m.oh}</span></div>
-                        <div class="odd-btn">X: <span class="odd-value">${m.od}</span></div>
-                        <div class="odd-btn">2: <span class="odd-value">${m.oa}</span></div>
-                    </div>
-                `;
-                list.appendChild(card);
-            });
-        }
-        function showDetail(m) {
-            document.getElementById('main-menu').classList.remove('active');
-            document.getElementById('match-detail').classList.add('active');
-            document.getElementById('detail-content').innerHTML = `
-                <h3 style="margin-top:0;">💎 ${m.home} vs ${m.away}</h3>
-                <div style="background:#21262d; padding:10px; border-radius:8px; text-align:center; font-size:16px; font-weight:bold; margin: 15px 0;">
-                    🔴 WYNIK LIVE (${m.minute}' min): ${m.hg} : ${m.ag}
-                </div>
-                <div class="odds-container">
-                    <div class="odd-btn">1: <span class="odd-value">${m.oh}</span></div>
-                    <div class="odd-btn">X: <span class="odd-value">${m.od}</span></div>
-                    <div class="odd-btn">2: <span class="odd-value">${m.oa}</span></div>
-                </div>
-            `;
-        }
-        function backToMenu() {
-            document.getElementById('match-detail').classList.remove('active');
-            document.getElementById('slip-view').classList.remove('active');
-            document.getElementById('main-menu').classList.add('active');
-            renderMatches();
-        }
-        renderMatches();
-    </script>
-</body>
-</html>
-"""
 
-@app.route('/')
-def web_app():
-    return render_template_string(HTML_TEMPLATE)
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+  json_string = request.get_data().decode("utf-8")
+  update = telebot.types.Update.de_json(json_string)
+  bot.process_new_updates([update])
+  return "!", 200
 
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
 
-threading.Thread(target=run_flask, daemon=True).start()
+@app.route("/")
+def index():
+  return "Bot is running!", 200
 
-authorized_users = set()
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.send_message(message.chat.id, "🔒 *Prywatny Terminal VIP*\n\nPodaj tajne hasło dostępu, aby odblokować aplikację:", parse_mode="Markdown")
-
-@bot.message_handler(func=lambda message: True)
-def check_password(message):
-    user_id = message.from_user.id
-    text = message.text.strip()
-
-    if user_id in authorized_users:
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        web_app_url = os.environ.get("RENDER_EXTERNAL_URL", "https://twoja-aplikacja.onrender.com")
-        btn_webapp = types.InlineKeyboardButton("🔥 Otwórz Terminal VIP LIVE", web_app=types.WebAppInfo(url=web_app_url))
-        markup.add(btn_webapp)
-        bot.send_message(message.chat.id, "Masz już aktywny dostęp. Kliknij poniżej:", reply_markup=markup)
-        return
-
-    if text == SECRET_PASSWORD:
-        authorized_users.add(user_id)
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        web_app_url = os.environ.get("RENDER_EXTERNAL_URL", "https://twoja-aplikacja.onrender.com")
-        btn_webapp = types.InlineKeyboardButton("🔥 Otwórz Terminal VIP LIVE", web_app=types.WebAppInfo(url=web_app_url))
-        markup.add(btn_webapp)
-        bot.send_message(message.chat.id, "✅ *Hasło poprawne!* Odblokowano dostęp do aplikacji:", parse_mode="Markdown", reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "❌ *Błędne hasło.* Brak dostępu.", parse_mode="Markdown")
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.polling(none_stop=True, interval=1)
+  bot.remove_webhook()
+  bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+  port = int(os.environ.get("PORT", 10000))
+  app.run(host="0.0.0.0", port=port)
