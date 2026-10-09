@@ -24,6 +24,7 @@ TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
 FOOTBALL_API_KEY = '5b93bf93f3ef419bbf9f89396cb08ebc'
 
 bot = telebot.TeleBot(TOKEN)
+live_matches_state = {}
 
 def get_today_matches_raw():
     url = "https://api.football-data.org/v4/matches"
@@ -129,35 +130,57 @@ def callback_query(call):
             else:
                 home, away, comp, status, hg, ag = "Gospodarz", "Gość", "Rozgrywki", "SCHEDULED", 0, 0
 
-            # Dynamiczny symulator wyników i zmieniających się kursów na żywo
-            seed = int(datetime.now().timestamp() // 5) + hash(match_id)
-            random.seed(seed)
+            # Utrwalony stan meczu dla ID (zapobiega zmianie wyników przy odświeżaniu)
+            if match_id not in live_matches_state:
+                seed = hash(match_id)
+                random.seed(seed)
+                if status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                    if hg == 0 and ag == 0:
+                        hg = random.choices([0, 1, 2], weights=[35, 50, 15])[0]
+                        ag = random.choices([0, 1], weights=[75, 25])[0]
+                    minute = random.randint(55, 82)
+                else:
+                    minute = 90
+                
+                if hg > ag:
+                    oh = round(random.uniform(1.10, 1.30), 2)
+                    od = round(random.uniform(5.50, 8.50), 2)
+                    oa = round(random.uniform(12.0, 25.0), 2)
+                elif ag > hg:
+                    oh = round(random.uniform(10.0, 20.0), 2)
+                    od = round(random.uniform(4.50, 7.50), 2)
+                    oa = round(random.uniform(1.15, 1.40), 2)
+                else:
+                    oh = round(random.uniform(2.20, 2.80), 2)
+                    od = round(random.uniform(2.90, 3.40), 2)
+                    oa = round(random.uniform(2.30, 3.10), 2)
+
+                live_matches_state[match_id] = {
+                    "hg": hg,
+                    "ag": ag,
+                    "minute": minute,
+                    "oh": oh,
+                    "od": od,
+                    "oa": oa
+                }
+            else:
+                # Delikatny postęp minuty przy odświeżaniu
+                if status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                    live_matches_state[match_id]["minute"] = min(90, live_matches_state[match_id]["minute"] + 1)
+
+            state = live_matches_state[match_id]
+            hg, ag, minute = state["hg"], state["ag"], state["minute"]
+            odds_home, odds_draw, odds_away = state["oh"], state["od"], state["oa"]
 
             if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                if hg == 0 and ag == 0:
-                    hg = random.choices([0, 1, 2], weights=[35, 50, 15])[0]
-                    ag = random.choices([0, 1], weights=[75, 25])[0]
-                minute = random.randint(50, 89)
                 live_score_text = f"🔴 *WYNIK NA ŻYWO ({minute}' min):* `{home} {hg} : {ag} {away}`"
             elif status == "FINISHED":
                 live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {hg} : {ag} {away}`"
             else:
                 live_score_text = f"🕒 *Status:* Mecz jeszcze się nie rozpoczął"
 
-            # Dynamiczne obliczanie kursów bukmacherskich na podstawie wyniku
-            if hg > ag:
-                odds_home = round(random.uniform(1.05, 1.35), 2)
-                odds_draw = round(random.uniform(4.50, 9.50), 2)
-                odds_away = round(random.uniform(8.00, 25.00), 2)
-            elif ag > hg:
-                odds_home = round(random.uniform(7.50, 20.00), 2)
-                odds_draw = round(random.uniform(4.00, 8.00), 2)
-                odds_away = round(random.uniform(1.10, 1.45), 2)
-            else:
-                odds_home = round(random.uniform(2.10, 3.20), 2)
-                odds_draw = round(random.uniform(2.80, 3.50), 2)
-                odds_away = round(random.uniform(2.20, 3.40), 2)
-
+            seed_prob = hash(match_id + str(hg) + str(ag))
+            random.seed(seed_prob)
             prob_home = random.randint(45, 82)
             prob_draw = random.randint(12, 25)
             prob_away = 100 - prob_home - prob_draw
