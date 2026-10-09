@@ -20,7 +20,7 @@ def run_http_server():
 threading.Thread(target=run_http_server, daemon=True).start()
 
 # Poprawny token bota w cudzysłowie
-TOKEN = '8921204127:AAEuwzlb5Uck9iVs--sGEzT2xI9IAxKxgk'
+TOKEN = 8921204127:AAEEndpP5w-tEjVda6kaEpiZP3cmCo57jxQ
 CHANNEL_USERNAME = '@Bot_vip_OG'
 
 bot = telebot.TeleBot(TOKEN)
