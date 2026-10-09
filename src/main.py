@@ -9,12 +9,10 @@ if TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Klucz sesji do zapamiętywania logowania
+app.secret_key = os.urandom(24)
 
-# Hasło dostępu do aplikacji
 SECRET_PASSWORD = "/14VI40"
 
-# Szablon strony logowania i samej aplikacji w jednym
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="pl">
@@ -45,7 +43,6 @@ HTML_TEMPLATE = """
         {% else %}
             <h2>Witaj w VIP Bet!</h2>
             <p>Masz pełny dostęp do analiz i kursów na żywo.</p>
-            <!-- Tutaj wkleisz docelową zawartość swojej aplikacji -->
         {% endif %}
     </div>
 </body>
@@ -55,11 +52,16 @@ HTML_TEMPLATE = """
 
 @bot.message_handler(commands=["14VI40"])
 def handle_command(message):
-    bot.reply_to(
+    sent_message = bot.reply_to(
         message,
         "Witaj! Kliknij poniższy link, aby otworzyć aplikację: "
         "https://match-bot-nal2.onrender.com",
     )
+    try:
+        # Automatyczne przypięcie wiadomości z linkiem na górze grupy
+        bot.pin_chat_message(chat_id=message.chat.id, message_id=sent_message.message_id)
+    except Exception as e:
+        print(f"Nie udało się przypiąć wiadomości (bot może nie mieć uprawnień administratora): {e}")
 
 
 @app.route("/", methods=["GET", "POST"])
