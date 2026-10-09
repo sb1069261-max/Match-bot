@@ -2,7 +2,7 @@ import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import telebot
 from telebot import types
 
@@ -28,24 +28,29 @@ bot = telebot.TeleBot(TOKEN)
 def get_today_matches():
     url = "https://api.football-data.org/v4/matches"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+    
+    # Pobieramy mecze od dzisiaj do 3 dni w przód, żeby na pewno coś się pojawiło
     today = datetime.now().strftime("%Y-%m-%d")
-    params = {"dateFrom": today, "dateTo": today}
+    future = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+    params = {"dateFrom": today, "dateTo": future}
     
     try:
         response = requests.get(url, headers=headers, params=params)
+        print(f"API Status: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             matches = data.get("matches", [])
             result = []
-            for m in matches[:6]:  # bierzemy do 6 meczów
+            for m in matches[:6]:
                 home = m['homeTeam']['name']
                 away = m['awayTeam']['name']
                 competition = m['competition']['name']
                 match_id = m['id']
+                match_date = m['utcDate'].split('T')[0]
                 result.append({
                     "id": str(match_id),
-                    "text": f"⚽ {home} vs {away}",
-                    "details": f"🏆 Rozgrywki: {competition}\n🏠 Gospodarz: {home}\n✈️ Gość: {away}"
+                    "text": f"⚽ {home} vs {away} ({match_date})",
+                    "details": f"🏆 Rozgrywki: {competition}\n📅 Data: {match_date}\n🏠 Gospodarz: {home}\n✈️ Gość: {away}"
                 })
             return result
     except Exception as e:
@@ -63,7 +68,7 @@ def send_welcome(message):
     text = (
         "⚽ *PRO BET ANALYZER v1.0* ⚽\n\n"
         "Witaj w profesjonalnym panelu analitycznym!\n"
-        "Wybierz opcję poniżej, aby pobrać najnowsze typy oparte na dzisiejszych meczach na żywo."
+        "Wybierz opcję poniżej, aby pobrać najnowsze typy oparte na aktualnych meczach."
     )
     
     bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=markup)
@@ -79,14 +84,14 @@ def callback_query(call):
                 for m in matches:
                     markup.add(types.InlineKeyboardButton(m["text"], callback_data=f"match_{m['id']}"))
             else:
-                markup.add(types.InlineKeyboardButton("Brak meczów na dziś / spróbuj później", callback_data="back_to_menu"))
+                markup.add(types.InlineKeyboardButton("Brak meczów / spróbuj później", callback_data="back_to_menu"))
                 
             markup.add(types.InlineKeyboardButton("⬅️ Powrót do menu", callback_data="back_to_menu"))
             
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text="📌 *Wybierz dzisiejszy mecz do analizy:*",
+                text="📌 *Wybierz mecz do analizy:*",
                 parse_mode="Markdown",
                 reply_markup=markup
             )
@@ -140,7 +145,7 @@ def callback_query(call):
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text="ℹ️ Aplikacja pobiera codzienne mecze na żywo bezpośrednio z międzynarodowych baz danych piłkarskich.",
+                text="ℹ️ Aplikacja pobiera mecze na żywo bezpośrednio z baz danych piłkarskich.",
                 parse_mode="Markdown",
                 reply_markup=markup
             )
@@ -163,6 +168,6 @@ def callback_query(call):
         print(f"Błąd: {e}")
 
 if __name__ == "__main__":
-    print("Bot ruszył z obsługą API...")
+    print("Bot ruszył z poszerzonym zakresem API...")
     bot.remove_webhook()
     bot.polling(none_stop=True, interval=2)
