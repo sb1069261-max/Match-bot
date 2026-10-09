@@ -9,7 +9,6 @@ app = Flask(__name__)
 TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
 bot = telebot.TeleBot(TOKEN)
 
-# Tajne hasło podane przez Ciebie
 SECRET_PASSWORD = "/14VI40"
 
 HTML_TEMPLATE = """
@@ -41,10 +40,8 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-
     <h2>🔥 Terminal VIP Live</h2>
     <div class="subtitle">Strefa Klubu VIP</div>
-
     <div id="main-menu" class="view-section active">
         <div class="tabs">
             <button class="tab active" onclick="switchTab('today')">🔴 Mecze Dziś (LIVE)</button>
@@ -53,12 +50,10 @@ HTML_TEMPLATE = """
         </div>
         <div id="matches-list"></div>
     </div>
-
     <div id="match-detail" class="view-section">
         <button class="back-btn" onclick="backToMenu()">⬅️ Powrót</button>
         <div class="analysis-box" id="detail-content"></div>
     </div>
-
     <div id="slip-view" class="view-section">
         <button class="back-btn" onclick="backToMenu()">⬅️ Powrót</button>
         <div class="analysis-box">
@@ -69,7 +64,6 @@ HTML_TEMPLATE = """
             <p>💰 <b>Łączny kurs AKO:</b> <span style="color: #f1e05a; font-size: 16px;">1.89</span></p>
         </div>
     </div>
-
     <script>
         let currentTab = 'today';
         const mockMatches = {
@@ -81,12 +75,10 @@ HTML_TEMPLATE = """
                 { id: 3, home: "Arsenal", away: "Chelsea", comp: "Premier League", minute: 0, hg: 0, ag: 0, oh: 2.10, od: 3.40, oa: 3.30 }
             ]
         };
-
         setInterval(() => {
             mockMatches.today.forEach(m => { if (m.minute > 0 && m.minute < 90) m.minute += 1; });
             if (document.getElementById('main-menu').classList.contains('active')) renderMatches();
         }, 10000);
-
         function switchTab(tab) {
             if(tab === 'slip') {
                 document.getElementById('main-menu').classList.remove('active');
@@ -99,7 +91,6 @@ HTML_TEMPLATE = """
             event.target.classList.add('active');
             renderMatches();
         }
-
         function renderMatches() {
             const list = document.getElementById('matches-list');
             list.innerHTML = '';
@@ -120,7 +111,6 @@ HTML_TEMPLATE = """
                 list.appendChild(card);
             });
         }
-
         function showDetail(m) {
             document.getElementById('main-menu').classList.remove('active');
             document.getElementById('match-detail').classList.add('active');
@@ -136,14 +126,12 @@ HTML_TEMPLATE = """
                 </div>
             `;
         }
-
         function backToMenu() {
             document.getElementById('match-detail').classList.remove('active');
             document.getElementById('slip-view').classList.remove('active');
             document.getElementById('main-menu').classList.add('active');
             renderMatches();
         }
-
         renderMatches();
     </script>
 </body>
