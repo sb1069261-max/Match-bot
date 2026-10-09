@@ -109,37 +109,42 @@ def callback_query(call):
             
             match_url = f"https://api.football-data.org/v4/matches/{match_id}"
             headers = {"X-Auth-Token": FOOTBALL_API_KEY}
-            resp = requests.get(match_url, headers=headers)
             
-            live_score_text = "🕒 Mecz jeszcze się nie rozpoczął"
-            if resp.status_code == 200:
-                m_data = resp.json()
-                home = m_data['homeTeam']['name']
-                away = m_data['awayTeam']['name']
-                comp = m_data['competition']['name']
-                status = m_data['status']
-                score = m_data.get('score', {})
-                full_time = score.get('fullTime', {})
-                
-                h_goals = full_time.get('home')
-                a_goals = full_time.get('away')
-                
-                if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                    hg = score.get('regularTime', {}).get('home') or h_goals or 0
-                    ag = score.get('regularTime', {}).get('away') or a_goals or 0
-                    live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}` (Status: {status})"
-                elif status == "FINISHED":
-                    live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {h_goals} : {a_goals} {away}`"
-                else:
-                    live_score_text = f"🕒 *Status:* Zaplanowany na {m_data['utcDate'].split('T')[0]}"
-            else:
-                matches = get_today_matches()
-                selected = next((m for m in matches if m["id"] == match_id), None)
-                if selected:
-                    home, away, comp = selected["home"], selected["away"], selected["competition"]
-                else:
-                    home, away, comp = "Gospodarz", "Gość", "Rozgrywki"
+            home, away, comp = "Gospodarz", "Gość", "Rozgrywki"
+            live_score_text = "🕒 Mecz w trakcie przygotowania"
             
+            try:
+                resp = requests.get(match_url, headers=headers)
+                if resp.status_code == 200:
+                    m_data = resp.json()
+                    home = m_data.get('homeTeam', {}).get('name', 'Gospodarz')
+                    away = m_data.get('awayTeam', {}).get('name', 'Gość')
+                    comp = m_data.get('competition', {}).get('name', 'Rozgrywki')
+                    status = m_data.get('status', 'SCHEDULED')
+                    score = m_data.get('score', {}) or {}
+                    
+                    full_time = score.get('fullTime', {}) or {}
+                    h_goals = full_time.get('home', 0)
+                    a_goals = full_time.get('away', 0)
+                    
+                    if status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                        reg_time = score.get('regularTime', {}) or {}
+                        hg = reg_time.get('home') if reg_time.get('home') is not None else (h_goals if h_goals is not None else 0)
+                        ag = reg_time.get('away') if reg_time.get('away') is not None else (a_goals if a_goals is not None else 0)
+                        live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}` (Status: {status})"
+                    elif status == "FINISHED":
+                        live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {h_goals or 0} : {a_goals or 0} {away}`"
+                    else:
+                        match_date = m_data.get('utcDate', '').split('T')[0]
+                        live_score_text = f"🕒 *Status:* Zaplanowany na {match_date}"
+                else:
+                    matches = get_today_matches()
+                    selected = next((m for m in matches if m["id"] == match_id), None)
+                    if selected:
+                        home, away, comp = selected["home"], selected["away"], selected["competition"]
+            except Exception as inner_err:
+                print(f"Match fetch detail error: {inner_err}")
+
             seed = hash(home + away)
             random.seed(seed)
             
@@ -248,7 +253,7 @@ def callback_query(call):
                 reply_markup=markup
             )
     except Exception as e:
-        print(f"Błąd: {e}")
+        print(f"Błąd ogólny callbacka: {e}")
 
 if __name__ == "__main__":
     print("Bot ruszył...")
