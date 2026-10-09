@@ -4,7 +4,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
 
-# Prosty serwer HTTP dla Render (żeby spełnić wymagania portu)
+# Prosty serwer HTTP dla Render (wymóg portu)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -16,30 +16,18 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
 
-# Uruchomienie serwera HTTP w osobnym wątku
+# Uruchomienie serwera HTTP w tle
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# Token bota w cudzysłowie
+# Twój najnowszy token bota w cudzysłowie
 TOKEN = '8921204127:AAEEndpP5w-tEjVda6kaEpiZP3cmCo57jxQ'
 CHANNEL_USERNAME = '@Bot_vip_OG'
 
 bot = telebot.TeleBot(TOKEN)
 
-# Funkcja sprawdzająca czy użytkownik jest członkiem grupy
-def is_user_in_channel(user_id):
-    try:
-        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-        return False
-    except Exception as e:
-        print(f"Błąd sprawdzania subskrypcji: {e}")
-        return False
-
-# Start / Menu główne z całkowitym pominięciem bramki na czas testów
+# Menu główne (bramka testowo pominięta)
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
-    # Menu główne wyświetlane od razu bez sprawdzania grupy
     banner_url = "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000&auto=format&fit=crop"
     
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -56,21 +44,9 @@ def send_welcome(message):
     
     bot.send_photo(message.chat.id, banner_url, caption=caption, parse_mode="Markdown", reply_markup=markup)
 
-# Obsługa kliknięć w przyciski
+# Obsługa przycisków
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
-    user_id = call.from_user.id
-    
-    if call.data == "check_subscription":
-        if is_user_in_channel(user_id):
-            bot.answer_callback_query(call.id, "Dziękujemy! Uzyskałeś dostęp.")
-            fake_message = call.message
-            fake_message.from_user = call.from_user
-            send_welcome(fake_message)
-        else:
-            bot.answer_callback_query(call.id, "Nadal nie dołączyłeś do grupy!", show_alert=True)
-        return
-
     try:
         if call.data == "analyze_menu":
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -151,7 +127,8 @@ def callback_query(call):
     except Exception as e:
         print(f"Błąd: {e}")
 
-# Uruchomienie bota
+# Start bota z czyszczeniem starych sesji zapobiegającym błędowi 409
 if __name__ == "__main__":
     print("Bot ruszył...")
-    bot.infinity_polling(skip_pending=True)
+    bot.remove_webhook()
+    bot.polling(none_stop=True, interval=2)
