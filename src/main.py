@@ -3,7 +3,7 @@ import telebot
 from telebot import types
 
 # Twój zaktualizowany token bota
-TOKEN = '8921204127:AAEMhEHOjjavIVsdV92vJGq-PsL_v-10nm0'
+TOKEN = 8921204127:AAFMrlmyxwEYnzI13Cypi1KpsGAjFLMd29M
 CHANNEL_USERNAME = '@Bot_vip'  # Nazwa grupy
 
 bot = telebot.TeleBot(TOKEN)
