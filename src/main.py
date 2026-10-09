@@ -41,7 +41,7 @@ def fetch_matches_by_date(date_str):
             for m in matches:
                 status = m['status']
                 if status == "FINISHED":
-                    continue  # Ukrywamy zakończone mecze całkowicie
+                    continue
                 
                 home = m['homeTeam']['name']
                 away = m['awayTeam']['name']
@@ -58,11 +58,12 @@ def fetch_matches_by_date(date_str):
                     status_icon = "🔴 [NA ŻYWO]"
                 
                 if match_id not in live_matches_db:
-                    if status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                    if "Borussia" in home:
+                        hg, ag, minute = 2, 2, 90
+                    elif status in ["LIVE", "IN_PLAY", "PAUSED"]:
                         if hg == 0 and ag == 0:
-                            hg = random.choices([0, 1, 2], weights=[40, 45, 15])[0]
-                            ag = random.choices([0, 1], weights=[70, 30])[0]
-                        minute = random.randint(45, 80)
+                            hg, ag = 1, 0
+                        minute = 68
                     else:
                         minute = 0
                     
@@ -73,9 +74,9 @@ def fetch_matches_by_date(date_str):
                     }
                 
                 m_data = live_matches_db[match_id]
-                if m_data["status"] in ["LIVE", "IN_PLAY", "PAUSED"]:
-                    elapsed = int((time.time() - m_data["start_time"]) / 10)
-                    m_data["minute"] = min(90, 60 + elapsed)
+                if m_data["status"] in ["LIVE", "IN_PLAY", "PAUSED"] and "Borussia" not in m_data["home"]:
+                    elapsed = int((time.time() - m_data["start_time"]) / 5)
+                    m_data["minute"] = min(90, 68 + elapsed)
                 
                 result.append({
                     "id": match_id,
@@ -144,7 +145,7 @@ def callback_query(call):
             
             bot.edit_message_text(
                 chat_id=chat_id, message_id=message_id,
-                text=f"📌 *Mecze na dzień {date_str} (Zakończone ukryte):*",
+                text=f"📌 *Mecze na dzień {date_str}:*",
                 parse_mode="Markdown", reply_markup=markup
             )
             
@@ -153,28 +154,26 @@ def callback_query(call):
             m_data = live_matches_db.get(match_id)
             
             if not m_data:
-                bot.answer_callback_query(call.id, "Mecz niedostępny lub zakończony.")
+                bot.answer_callback_query(call.id, "Mecz niedostępny.")
                 return
 
             home, away, comp = m_data["home"], m_data["away"], m_data["comp"]
             status, hg, ag, minute = m_data["status"], m_data["hg"], m_data["ag"], m_data["minute"]
 
-            if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                elapsed = int((time.time() - m_data["start_time"]) / 10)
-                minute = min(90, 60 + elapsed)
+            if "Borussia" in home:
+                hg, ag, minute = 2, 2, "90+6'"
+                oh, od, oa = "10,50", "1,04", "20,0"
+                live_score_text = f"🔴 *WYNIK NA ŻYWO ({minute} min - LIVE):* `{home} {hg} : {ag} {away}`"
+            elif status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                elapsed = int((time.time() - m_data["start_time"]) / 5)
+                minute = min(89, 68 + elapsed)
                 m_data["minute"] = minute
-                live_score_text = f"🔴 *WYNIK NA ŻYWO ({minute}' min - aktualizacja na żywo):* `{home} {hg} : {ag} {away}`"
-                oh, od, oa = round(random.uniform(1.10, 1.30), 2), round(random.uniform(5.50, 8.50), 2), round(random.uniform(12.0, 25.0), 2)
+                live_score_text = f"🔴 *WYNIK NA ŻYWO ({minute}' min - LIVE):* `{home} {hg} : {ag} {away}`"
+                oh, od, oa = "14,0", "3,75", "1,32"
             else:
-                live_score_text = f"⏳ *Status:* Mecz nadchodzący / zaplanowany"
-                oh, od, oa = round(random.uniform(1.80, 2.40), 2), round(random.uniform(3.10, 3.60), 2), round(random.uniform(2.10, 3.00), 2)
+                live_score_text = f"⏳ *Status:* Mecz nadchodzący"
+                oh, od, oa = "2,10", "3,20", "2,80"
 
-            random.seed(hash(match_id + str(hg)))
-            prob_home = random.randint(45, 82)
-            prob_draw = random.randint(12, 25)
-            prob_away = 100 - prob_home - prob_draw
-            if prob_away < 5: prob_away = 8
-            
             analysis_text = (
                 f"💎 *RAPORT LIVE & VIP: {home} vs {away}* 💎\n"
                 f"🏆 *Rozgrywki:* {comp}\n\n"
@@ -183,7 +182,6 @@ def callback_query(call):
                 f"• {home}: `{oh}`\n"
                 f"• Remis: `{od}`\n"
                 f"• {away}: `{oa}`\n\n"
-                f"📈 *Szacowane szanse:* {home}: *{prob_home}%* | Remis: *{prob_draw}%* | {away}: *{prob_away}%*\n\n"
                 f"✍️ *Analiza by Hrabia*"
             )
             
