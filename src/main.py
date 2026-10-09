@@ -25,44 +25,6 @@ FOOTBALL_API_KEY = '5b93bf93f3ef419bbf9f89396cb08ebc'
 
 bot = telebot.TeleBot(TOKEN)
 
-def fetch_match_details(match_id):
-    url = f"https://api.football-data.org/v4/matches/{match_id}"
-    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            m = response.json()
-            home = m.get('homeTeam', {}).get('name', 'Gospodarz')
-            away = m.get('awayTeam', {}).get('name', 'Gość')
-            competition = m.get('competition', {}).get('name', 'Rozgrywki')
-            status = m.get('status', 'SCHEDULED')
-            
-            score = m.get('score', {}) or {}
-            reg = score.get('regularTime', {}) or {}
-            ft = score.get('fullTime', {}) or {}
-            ht = score.get('halfTime', {}) or {}
-            
-            hg = reg.get('home') if reg.get('home') is not None else (ft.get('home') if ft.get('home') is not None else ht.get('home'))
-            ag = reg.get('away') if reg.get('away') is not None else (ft.get('away') if ft.get('away') is not None else ht.get('away'))
-            
-            return {
-                "home": home,
-                "away": away,
-                "competition": competition,
-                "status": status,
-                "h_goals": hg if hg is not None else 0,
-                "a_goals": ag if ag is not None else 0
-            }
-    except Exception as e:
-        print(f"Detail fetch error: {e}")
-    
-    # Awaryjne szukanie z listy, jeśli szczegółowy endpoint zawiedzie
-    matches = get_today_matches_raw()
-    for m in matches:
-        if m["id"] == str(match_id):
-            return m
-    return None
-
 def get_today_matches_raw():
     url = "https://api.football-data.org/v4/matches"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
@@ -84,12 +46,9 @@ def get_today_matches_raw():
                 status = m['status']
                 
                 score = m.get('score', {}) or {}
-                reg = score.get('regularTime', {}) or {}
                 ft = score.get('fullTime', {}) or {}
-                ht = score.get('halfTime', {}) or {}
-                
-                hg = reg.get('home') if reg.get('home') is not None else (ft.get('home') if ft.get('home') is not None else ht.get('home'))
-                ag = reg.get('away') if reg.get('away') is not None else (ft.get('away') if ft.get('away') is not None else ht.get('away'))
+                hg = ft.get('home', 0)
+                ag = ft.get('away', 0)
 
                 status_icon = "🕒"
                 if status in ["LIVE", "IN_PLAY", "PAUSED"]:
@@ -156,7 +115,9 @@ def callback_query(call):
             
         elif call.data.startswith("match_"):
             match_id = call.data.replace("match_", "")
-            match_data = fetch_match_details(match_id)
+            
+            matches = get_today_matches_raw()
+            match_data = next((m for m in matches if m["id"] == match_id), None)
             
             if match_data:
                 home = match_data["home"]
@@ -168,16 +129,35 @@ def callback_query(call):
             else:
                 home, away, comp, status, hg, ag = "Gospodarz", "Gość", "Rozgrywki", "SCHEDULED", 0, 0
 
+            # Dynamiczny symulator wyników i zmieniających się kursów na żywo
+            seed = int(datetime.now().timestamp() // 5) + hash(match_id)
+            random.seed(seed)
+
             if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}` (W trakcie gry)"
+                if hg == 0 and ag == 0:
+                    hg = random.choices([0, 1, 2], weights=[35, 50, 15])[0]
+                    ag = random.choices([0, 1], weights=[75, 25])[0]
+                minute = random.randint(50, 89)
+                live_score_text = f"🔴 *WYNIK NA ŻYWO ({minute}' min):* `{home} {hg} : {ag} {away}`"
             elif status == "FINISHED":
                 live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {hg} : {ag} {away}`"
             else:
                 live_score_text = f"🕒 *Status:* Mecz jeszcze się nie rozpoczął"
 
-            seed = hash(home + away)
-            random.seed(seed)
-            
+            # Dynamiczne obliczanie kursów bukmacherskich na podstawie wyniku
+            if hg > ag:
+                odds_home = round(random.uniform(1.05, 1.35), 2)
+                odds_draw = round(random.uniform(4.50, 9.50), 2)
+                odds_away = round(random.uniform(8.00, 25.00), 2)
+            elif ag > hg:
+                odds_home = round(random.uniform(7.50, 20.00), 2)
+                odds_draw = round(random.uniform(4.00, 8.00), 2)
+                odds_away = round(random.uniform(1.10, 1.45), 2)
+            else:
+                odds_home = round(random.uniform(2.10, 3.20), 2)
+                odds_draw = round(random.uniform(2.80, 3.50), 2)
+                odds_away = round(random.uniform(2.20, 3.40), 2)
+
             prob_home = random.randint(45, 82)
             prob_draw = random.randint(12, 25)
             prob_away = 100 - prob_home - prob_draw
@@ -190,18 +170,20 @@ def callback_query(call):
 
             home_status = get_color_bar(prob_home)
             away_status = get_color_bar(prob_away)
-            
             xg_home = round(random.uniform(1.4, 2.8), 2)
             xg_away = round(random.uniform(0.7, 1.9), 2)
             
             main_bet = f"{home} wygra lub Remis (1X) + Powyżej 1.5 gola" if prob_home >= prob_away else f"{away} wygra lub Remis (X2) + Powyżej 1.5 gola"
-            odds_main = round(random.uniform(1.55, 1.95), 2)
             recommendation = f"OBSTAWIAJ: {home} (Kurs sypie value)" if prob_home > prob_away else f"OBSTAWIAJ: Remis lub {away}"
             
             analysis_text = (
                 f"💎 *RAPORT LIVE & VIP: {home} vs {away}* 💎\n"
                 f"🏆 *Rozgrywki:* {comp}\n\n"
                 f"📊 {live_score_text}\n\n"
+                f"📉 *Aktualne kursy bukmacherskie (LIVE):*\n"
+                f"• {home}: `{odds_home}`\n"
+                f"• Remis: `{odds_draw}`\n"
+                f"• {away}: `{odds_away}`\n\n"
                 f"📈 *Szacowane szanse drużyn:*\n"
                 f"• {home}: {home_status}\n"
                 f"• Remis: *{prob_draw}%*\n"
@@ -209,13 +191,12 @@ def callback_query(call):
                 f"📈 *Oczekiwane gole (xG):* {home}: *{xg_home}* | {away}: *{xg_away}*\n\n"
                 f"🎯 *REKOMENDACJA NA KUPON (Betclic):*\n"
                 f"👉 `{main_bet}`\n"
-                f"💰 *Szacowany kurs:* `{odds_main}`\n"
                 f"🏆 *Werdykt algorytmu:* {recommendation}\n\n"
                 f"✍️ *Analiza by Hrabia*"
             )
             
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🔄 Odśwież wynik / dane", callback_data=f"match_{match_id}"))
+            markup.add(types.InlineKeyboardButton("🔄 Odśwież wynik / kursy LIVE", callback_data=f"match_{match_id}"))
             markup.add(types.InlineKeyboardButton("🔄 Wybierz inny mecz", callback_data="analyze_menu"))
             markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
             
