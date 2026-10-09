@@ -17,7 +17,7 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# Nowy token w cudzysłowie
+# Nowy token i poprawna nazwa grupy
 TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
 CHANNEL_USERNAME = '@Bot_vip_OG'
 
