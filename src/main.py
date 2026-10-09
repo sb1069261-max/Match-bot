@@ -22,7 +22,6 @@ threading.Thread(target=run_http_server, daemon=True).start()
 
 TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
 FOOTBALL_API_KEY = '5b93bf93f3ef419bbf9f89396cb08ebc'
-CHANNEL_USERNAME = '@Bot_vip_OG'
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -67,9 +66,9 @@ def send_welcome(message):
     markup.add(btn_analyze, btn_slip, btn_stats)
     
     text = (
-        "🤖 *PRO BET ANALYZER v3.0 (VIP)* 🤖\n\n"
-        "Profesjonalny system analityczny o wysokiej skuteczności.\n"
-        "Wybierz opcję poniżej, aby wygenerować pewne typy:"
+        "🤖 *PRO BET ANALYZER v3.1 (VIP)* 🤖\n\n"
+        "System analityczny gotowy do pracy.\n"
+        "Wybierz opcję poniżej:"
     )
     bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=markup)
 
@@ -106,7 +105,6 @@ def callback_query(call):
                 away = selected["away"]
                 comp = selected["competition"]
                 
-                # Generowanie profesjonalnych, unikalnych wskaźników
                 seed = hash(home + away)
                 random.seed(seed)
                 
@@ -115,7 +113,6 @@ def callback_query(call):
                 prob_away = 100 - prob_home - prob_draw
                 if prob_away < 5: prob_away = 8
                 
-                # Kolorowanie szans w zależności od wartości
                 def get_color_bar(val):
                     if val >= 70: return f"🟢 *{val}%* (Wysoka pewność)"
                     elif val >= 45: return f"🟡 *{val}%* (Umiarkowana szansa)"
@@ -214,7 +211,7 @@ def callback_query(call):
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text="🤖 *PRO BET ANALYZER v3.0 (VIP)* 🤖\n\nWybierz opcję poniżej:",
+                text="🤖 *PRO BET ANALYZER v3.1 (VIP)* 🤖\n\nWybierz opcję poniżej:",
                 parse_mode="Markdown",
                 reply_markup=markup
             )
@@ -222,6 +219,6 @@ def callback_query(call):
         print(f"Błąd: {e}")
 
 if __name__ == "__main__":
-    print("Bot VIP v3.0 wystartował pomyślnie...")
+    print("Bot ruszył...")
     bot.remove_webhook()
     bot.polling(none_stop=True, interval=2)
