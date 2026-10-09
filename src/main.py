@@ -84,6 +84,10 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     try:
+        bot.answer_callback_query(call.id)
+        chat_id = call.message.chat.id
+        message_id = call.message.message_id
+
         if call.data == "analyze_menu":
             matches = get_today_matches()
             markup = types.InlineKeyboardMarkup(row_width=1)
@@ -97,8 +101,8 @@ def callback_query(call):
             markup.add(types.InlineKeyboardButton("⬅️ Powrót do menu", callback_data="back_to_menu"))
             
             bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
+                chat_id=chat_id,
+                message_id=message_id,
                 text="📌 *Wybierz mecz do zaawansowanej analizy LIVE:*",
                 parse_mode="Markdown",
                 reply_markup=markup
@@ -190,13 +194,12 @@ def callback_query(call):
             markup.add(types.InlineKeyboardButton("🔄 Wybierz inny mecz", callback_data="analyze_menu"))
             markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
             
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text=analysis_text,
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
+            try:
+                bot.delete_message(chat_id, message_id)
+            except:
+                pass
+                
+            bot.send_message(chat_id, analysis_text, parse_mode="Markdown", reply_markup=markup)
             
         elif call.data == "check_slip":
             markup = types.InlineKeyboardMarkup()
@@ -209,11 +212,12 @@ def callback_query(call):
                 "1. Wybrany faworyt z kursem min. `1.45`\n"
                 "2. Powyżej 1.5 gola w meczu hitowym (`1.30`)\n\n"
                 "Łączny kurs kuponu: ok. *1.88*\n"
-                "Rekomendowana stawka: *5% budżetu*"
+                "Rekomendowana stawka: *5% budżetu*\n\n"
+                "✍️ *Analiza by Hrabia*"
             )
             bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
+                chat_id=chat_id,
+                message_id=message_id,
                 text=slip_text,
                 parse_mode="Markdown",
                 reply_markup=markup
@@ -228,11 +232,12 @@ def callback_query(call):
                 "• Trafność typów zielonych (>70%): *82.4%*\n"
                 "• Średni kurs wygranych kuponów: *1.92*\n"
                 "• Bilans miesięczny: *+24.6 jednostek*\n\n"
-                "🟢 *Status algorytmu:* Pełna gotowość analityczna."
+                "🟢 *Status algorytmu:* Pełna gotowość analityczna.\n\n"
+                "✍️ *Analiza by Hrabia*"
             )
             bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
+                chat_id=chat_id,
+                message_id=message_id,
                 text=stats_text,
                 parse_mode="Markdown",
                 reply_markup=markup
@@ -246,8 +251,8 @@ def callback_query(call):
             markup.add(btn_analyze, btn_slip, btn_stats)
             
             bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
+                chat_id=chat_id,
+                message_id=message_id,
                 text="🤖 *PRO BET ANALYZER v3.2 (LIVE & VIP)* 🤖\n\nWybierz opcję poniżej:",
                 parse_mode="Markdown",
                 reply_markup=markup
