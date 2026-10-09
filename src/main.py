@@ -36,29 +36,10 @@ def is_user_in_channel(user_id):
         print(f"Błąd sprawdzania subskrypcji: {e}")
         return False
 
-# Start / Menu główne z testowym pominięciem bramki
+# Start / Menu główne z całkowitym pominięciem bramki na czas testów
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
-    user_id = message.from_user.id
-    
-    # TEST: Bramka chwilowo wyłączona (if False), żeby sprawdzić czy menu działa
-    if False:
-        if not is_user_in_channel(user_id):
-            markup = types.InlineKeyboardMarkup()
-            btn_channel = types.InlineKeyboardButton("📢 Dołącz do grupy Bot-vip", url="https://t.me/Bot_vip_OG")
-            btn_check = types.InlineKeyboardButton("🔄 Sprawdź ponownie", callback_data="check_subscription")
-            markup.add(btn_channel, btn_check)
-            
-            bot.send_message(
-                message.chat.id,
-                "⛔ *Brak dostępu!*\n\n"
-                "Musisz być członkiem grupy *Bot-vip*, aby korzystać z tego bota analitycznego.",
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
-            return
-
-    # Menu główne dla użytkownika
+    # Menu główne wyświetlane od razu bez sprawdzania grupy
     banner_url = "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000&auto=format&fit=crop"
     
     markup = types.InlineKeyboardMarkup(row_width=1)
