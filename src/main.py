@@ -1,226 +1,222 @@
 import os
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import requests
-from datetime import datetime, timedelta
-import time
+from flask import Flask, render_template_string, jsonify
 import telebot
 from telebot import types
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
-
-threading.Thread(target=run_http_server, daemon=True).start()
+# Konfiguracja serwera WWW dla Telegram Mini App
+app = Flask(__name__)
 
 TOKEN = '8754541396:AAEu4nYoJGvN9wZ7gcqRbSiav9-jcCczo6c'
-FOOTBALL_API_KEY = '5b93bf93f3ef419bbf9f89396cb08ebc'
-
 bot = telebot.TeleBot(TOKEN)
-live_engine_db = {}
 
-def fetch_matches_by_date(date_str):
-    url = "https://api.football-data.org/v4/matches"
-    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
-    params = {"date": date_str}
-    
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            matches = data.get("matches", [])
-            result = []
-            for m in matches:
-                status = m['status']
-                if status == "FINISHED":
-                    continue
-                
-                home = m['homeTeam']['name']
-                away = m['awayTeam']['name']
-                competition = m['competition']['name']
-                match_id = str(m['id'])
-                
-                score = m.get('score', {}) or {}
-                ft = score.get('fullTime', {}) or {}
-                hg = ft.get('home', 1) if ft.get('home') is not None else 1
-                ag = ft.get('away', 0) if ft.get('away') is not None else 0
+# Szablon interfejsu Web App (Styl Betclic / Superbet z płynnym licznikiem i kursami LIVE)
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP Bet by Hrabia - Live</title>
+    <style>
+        body { background-color: #0d1117; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 15px; }
+        h2 { text-align: center; color: #e53935; text-transform: uppercase; font-size: 20px; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #8c959f; font-size: 12px; margin-bottom: 20px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
+        .tab { background: #21262d; border: none; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; font-weight: bold; }
+        .tab.active { background: #e53935; }
+        .match-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
+        .match-card:hover { border-color: #e53935; }
+        .match-header { display: flex; justify-content: space-between; font-size: 11px; color: #8c959f; margin-bottom: 8px; }
+        .live-badge { background: #e53935; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .teams-score { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
+        .score-box { background: #21262d; padding: 4px 10px; border-radius: 6px; font-family: monospace; color: #f0f6fc; }
+        .odds-container { display: flex; gap: 6px; }
+        .odd-btn { flex: 1; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 6px; text-align: center; color: #fff; font-size: 12px; }
+        .odd-value { color: #f1e05a; font-weight: bold; font-size: 13px; }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        .back-btn { background: #30363d; border: none; color: white; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; cursor: pointer; font-size: 13px; }
+        .analysis-box { background: #161b22; border-radius: 12px; padding: 15px; border: 1px solid #30363d; }
+    </style>
+</head>
+<body>
 
-                status_icon = "⏳"
-                is_live = status in ["LIVE", "IN_PLAY", "PAUSED"]
-                if is_live:
-                    status_icon = "🔴 [NA ŻYWO]"
-                
-                if match_id not in live_engine_db:
-                    live_engine_db[match_id] = {
-                        "home": home, "away": away, "comp": competition,
-                        "status": status, "hg": hg, "ag": ag,
-                        "base_minute": 65 if is_live else 0,
-                        "init_time": time.time()
-                    }
-                
-                match_info = live_engine_db[match_id]
-                current_min = match_info["base_minute"]
-                if is_live:
-                    elapsed = int(time.time() - match_info["init_time"])
-                    current_min = min(89, match_info["base_minute"] + (elapsed // 5))
-                
-                result.append({
-                    "id": match_id,
-                    "home": home, "away": away,
-                    "competition": competition,
-                    "status": match_info["status"],
-                    "text": f"{status_icon} {home} {match_info['hg']}:{match_info['ag']} {away} ({current_min}')"
-                })
-            return result
-    except Exception as e:
-        print(f"Engine API Error: {e}")
-    return []
+    <h2>🔥 VIP Bet by Hrabia Hub</h2>
+    <div class="subtitle">Oficjalny Terminal Live & Bukmacherka</div>
 
+    <!-- Zakładki główne -->
+    <div id="main-menu" class="view-section active">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('today')">🔴 Mecze Dziś (LIVE)</button>
+            <button class="tab" onclick="switchTab('tomorrow')">📅 Mecze Jutro</button>
+            <button class="tab" onclick="switchTab('slip')">💡 Generator AKO</button>
+        </div>
+
+        <div id="matches-list">
+            <!-- Tutaj ładowane są mecze przez JS -->
+        </div>
+    </div>
+
+    <!-- Widok szczegółów meczu -->
+    <div id="match-detail" class="view-section">
+        <button class="back-btn" onclick="backToMenu()">⬅️ Powrót do listy</button>
+        <div class="analysis-box" id="detail-content">
+            <!-- Dynamiczna analiza meczu -->
+        </div>
+    </div>
+
+    <!-- Widok generatora kuponów -->
+    <div id="slip-view" class="view-section">
+        <button class="back-btn" onclick="backToMenu()">⬅️ Powrót do menu</button>
+        <div class="analysis-box">
+            <h3>💡 PEWNY KUPON AKO DNIA (VIP)</h3>
+            <p>1️⃣ <b>FC Barcelona vs Real Madryt</b><br>Typ: <code>Barcelona wygra lub Remis (1X)</code> | Kurs: <b>1.48</b></p>
+            <p>2️⃣ <b>Manchester City vs Arsenal</b><br>Typ: <code>Powyżej 1.5 gola</code> | Kurs: <b>1.28</b></p>
+            <hr style="border-color: #30363d;">
+            <p>💰 <b>Łączny kurs AKO:</b> <span style="color: #f1e05a; font-size: 16px;">1.89</span></p>
+            <p>🎯 <b>Zalecana stawka:</b> 5% budżetu</p>
+            <p style="color: #8c959f; font-size: 11px; margin-top: 15px;">Analiza by Hrabia</p>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'today';
+        let selectedMatch = null;
+
+        const mockMatches = {
+            today: [
+                { id: 1, home: "Sporting Braga", away: "Sporting Lizbona", comp: "Liga Betclic", minute: 70, hg: 1, ag: 1, oh: 5.00, od: 1.88, oa: 2.70 },
+                { id: 2, home: "Borussia Dortmund", away: "Werder Brema", comp: "Bundesliga", minute: 90, hg: 2, ag: 2, oh: 10.50, od: 1.04, oa: 20.0 },
+                { id: 3, home: "Real Madryt", away: "FC Barcelona", comp: "La Liga", minute: 34, hg: 1, ag: 0, oh: 1.85, od: 3.50, oa: 4.10 }
+            ],
+            tomorrow: [
+                { id: 4, home: "Arsenal", away: "Chelsea", comp: "Premier League", minute: 0, hg: 0, ag: 0, oh: 2.10, od: 3.40, oa: 3.30 },
+                { id: 5, home: "Bayern Monachium", away: "RB Leipzig", comp: "Bundesliga", minute: 0, hg: 0, ag: 0, oh: 1.45, od: 4.80, oa: 6.20 }
+            ]
+        };
+
+        // Live zegar w tle (minuty rosną same sekunda po sekundzie jak na Betclic!)
+        setInterval(() => {
+            mockMatches.today.forEach(m => {
+                if (m.minute > 0 && m.minute < 90) {
+                    m.minute += 1; // Symulacja upływu czasu
+                }
+            });
+            if (document.getElementById('main-menu').classList.contains('active')) {
+                renderMatches();
+            }
+        }, 10000); // Co 10 sekund minuta rośnie dla realizmu
+
+        function switchTab(tab) {
+            if(tab === 'slip') {
+                document.getElementById('main-menu').classList.remove('active');
+                document.getElementById('match-detail').classList.remove('active');
+                document.getElementById('slip-view').classList.add('active');
+                return;
+            }
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            renderMatches();
+        }
+
+        function renderMatches() {
+            const list = document.getElementById('matches-list');
+            list.innerHTML = '';
+            const matches = mockMatches[currentTab] || [];
+            
+            matches.forEach(m => {
+                let statusText = m.minute > 0 ? `<span class="live-badge">🔴 LIVE (${m.minute}')</span>` : `<span style="color:#8c959f;">⏳ Zaplanowany</span>`;
+                let card = document.createElement('div');
+                card.className = 'match-card';
+                card.onclick = () => showDetail(m);
+                card.innerHTML = `
+                    <div class="match-header">
+                        <span>${m.comp}</span>
+                        ${statusText}
+                    </div>
+                    <div class="teams-score">
+                        <span>${m.home} vs ${m.away}</span>
+                        <div class="score-box">${m.hg} : ${m.ag}</div>
+                    </div>
+                    <div class="odds-container">
+                        <div class="odd-btn">1: <span class="odd-value">${m.oh}</span></div>
+                        <div class="odd-btn">X: <span class="odd-value">${m.od}</span></div>
+                        <div class="odd-btn">2: <span class="odd-value">${m.oa}</span></div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function showDetail(m) {
+            selectedMatch = m;
+            document.getElementById('main-menu').classList.remove('active');
+            document.getElementById('slip-view').classList.remove('active');
+            document.getElementById('match-detail').classList.add('active');
+
+            let detail = document.getElementById('detail-content');
+            detail.innerHTML = `
+                <h3 style="margin-top:0; color:#f0f6fc;">💎 ${m.home} vs ${m.away}</h3>
+                <p style="color:#8c959f; font-size:12px;">🏆 Rozgrywki: ${m.comp}</p>
+                <div style="background:#21262d; padding:10px; border-radius:8px; text-align:center; font-size:18px; font-weight:bold; margin: 15px 0;">
+                    🔴 WYNIK LIVE (${m.minute}' min): ${m.hg} : ${m.ag}
+                </div>
+                <p>📉 <b>Aktualne kursy bukmacherskie LIVE:</b></p>
+                <div class="odds-container" style="margin-bottom: 20px;">
+                    <div class="odd-btn">1 (${m.home}): <span class="odd-value">${m.oh}</span></div>
+                    <div class="odd-btn">X (Remis): <span class="odd-value">${m.od}</span></div>
+                    <div class="odd-btn">2 (${m.away}): <span class="odd-value">${m.oa}</span></div>
+                </div>
+                <p>🎯 <b>Rekomendacja algorytmu:</b><br>Obserwuj posiadanie piłki i xG. Kurs na bramkę w końcówce mocno rośnie!</p>
+                <p style="color:#8c959f; font-size:11px; margin-top:20px; text-align:right;">Analiza by Hrabia</p>
+            `;
+        }
+
+        function backToMenu() {
+            document.getElementById('match-detail').classList.remove('active');
+            document.getElementById('slip-view').classList.remove('active');
+            document.getElementById('main-menu').classList.add('active');
+            renderMatches();
+        }
+
+        // Inicjalizacja startowa
+        renderMatches();
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def web_app():
+    return render_template_string(HTML_TEMPLATE)
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# Uruchomienie serwera WWW w osobnym wątku
+threading.Thread(target=run_flask, daemon=True).start()
+
+# Obsługa bota Telegram – przycisk otwierający aplikację Web App
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_analyze = types.InlineKeyboardButton("🔥 Betclic / Superbet VIP Hub", callback_data="betclic_hub")
-    btn_slip = types.InlineKeyboardButton("💡 Generator Kuponu AKO", callback_data="check_slip")
-    btn_stats = types.InlineKeyboardButton("📈 Skuteczność Algorytmu", callback_data="stats")
-    markup.add(btn_analyze, btn_slip, btn_stats)
+    
+    # Tworzymy przycisk Web App, który otwiera aplikację bezpośrednio w Telegramie!
+    web_app_url = os.environ.get("RENDER_EXTERNAL_URL", "https://twoja-aplikacja.onrender.com")
+    btn_webapp = types.InlineKeyboardButton("🔥 Otwórz Terminal Betclic LIVE", web_app=types.WebAppInfo(url=web_app_url))
+    
+    markup.add(btn_webapp)
     
     text = (
-        "🤖 *VIP Bet by Hrabia | REAL LIVE ENGINE* 🤖\n\n"
-        "Wybierz zakładkę:"
+        "🤖 *VIP Bet by Hrabia | WEB APP ENGINE* 🤖\n\n"
+        "Kliknij przycisk poniżej, aby uruchomić profesjonalny terminal żywych kursów i wyników na żywo bezpośrednio w Telegramie:"
     )
     bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    try:
-        bot.answer_callback_query(call.id)
-        chat_id = call.message.chat.id
-        message_id = call.message.message_id
-
-        if call.data == "betclic_hub":
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-            next_week_str = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-            
-            markup.add(
-                types.InlineKeyboardButton("🔴 Mecze Dziś (LIVE)", callback_data=f"day_{today_str}"),
-                types.InlineKeyboardButton("📅 Mecze Jutro", callback_data=f"day_{tomorrow_str}"),
-                types.InlineKeyboardButton("🔮 Za tydzień", callback_data=f"day_{next_week_str}"),
-                types.InlineKeyboardButton("⬅️ Powrót do menu", callback_data="back_to_menu")
-            )
-            
-            bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text="⚽ *TERMINARZ BUKMACHERSKI - WYBIERZ DZIEŃ:*",
-                parse_mode="Markdown", reply_markup=markup
-            )
-            
-        elif call.data.startswith("day_"):
-            date_str = call.data.replace("day_", "")
-            matches = fetch_matches_by_date(date_str)[:8]
-            
-            markup = types.InlineKeyboardMarkup(row_width=1)
-            if matches:
-                for m in matches:
-                    markup.add(types.InlineKeyboardButton(m["text"], callback_data=f"match_{m['id']}"))
-            else:
-                markup.add(types.InlineKeyboardButton("Brak aktywnych meczów", callback_data="betclic_hub"))
-                
-            markup.add(types.InlineKeyboardButton("⬅️ Wybierz inny dzień", callback_data="betclic_hub"))
-            
-            bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text=f"📌 *Mecze na dzień {date_str} (Zakończone ukryte):*",
-                parse_mode="Markdown", reply_markup=markup
-            )
-            
-        elif call.data.startswith("match_"):
-            match_id = call.data.replace("match_", "")
-            m_data = live_engine_db.get(match_id)
-            
-            if not m_data:
-                bot.answer_callback_query(call.id, "Mecz niedostępny w systemie.")
-                return
-
-            home, away, comp = m_data["home"], m_data["away"], m_data["comp"]
-            status, hg, ag = m_data["status"], m_data["hg"], m_data["ag"]
-
-            elapsed = int(time.time() - m_data["init_time"])
-            current_min = min(89, m_data["base_minute"] + (elapsed // 5))
-
-            if hg > ag:
-                oh, od, oa = round(1.15 + (hg - ag) * 0.10, 2), round(4.50 + (hg - ag) * 1.50, 2), round(8.50 + (hg - ag) * 5.00, 2)
-            elif ag > hg:
-                oh, od, oa = round(8.50 + (ag - hg) * 5.00, 2), round(4.50 + (ag - hg) * 1.50, 2), round(1.15 + (ag - hg) * 0.10, 2)
-            else:
-                oh, od, oa = 2.45, 3.20, 2.85
-
-            if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                live_score_text = f"🔴 *WYNIK NA ŻYWO ({current_min}' min):* `{home} {hg} : {ag} {away}`"
-            else:
-                live_score_text = f"⏳ *Status:* Mecz przedmeczowy (Nadchodzący)"
-
-            analysis_text = (
-                f"💎 *RAPORT VIP & KURS LIVE: {home} vs {away}* 💎\n"
-                f"🏆 *Rozgrywki:* {comp}\n\n"
-                f"📊 {live_score_text}\n\n"
-                f"📉 *AKTUALNE KURSY (Betclic / Superbet):*\n"
-                f"🟢 **{home}**: `{oh}` | 🟡 **Remis**: `{od}` | 🔴 **{away}**: `{oa}`\n\n"
-                f"✍️ *Analiza by Hrabia*"
-            )
-            
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🔄 Odśwież wynik / kursy LIVE", callback_data=f"match_{match_id}"))
-            markup.add(types.InlineKeyboardButton("⬅️ Powrót do listy", callback_data="betclic_hub"))
-            markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
-            
-            bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id,
-                text=analysis_text, parse_mode="Markdown", reply_markup=markup
-            )
-            
-        elif call.data == "check_slip":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
-            
-            slip_text = (
-                "💡 *PEWNY KUPON AKO DNIA (VIP)* 💡\n\n"
-                "Nasze algorytmy wyselekcjonowały najsilniejsze zdarzenia na nadchodzące mecze:\n\n"
-                "1️⃣ **FC Barcelona vs Real Madryt**\n"
-                "• Typ: `Barcelona wygra lub Remis (1X)` | Kurs: `1.48`\n\n"
-                "2️⃣ **Manchester City vs Arsenal**\n"
-                "• Typ: `Powyżej 1.5 gola w meczu` | Kurs: `1.28`\n\n"
-                "💰 **Łączny kurs AKO:** `1.89`\n"
-                "🎯 **Rekomendowana stawka:** 5% budżetu\n\n"
-                "✍️ *Analiza by Hrabia*"
-            )
-            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=slip_text, parse_mode="Markdown", reply_markup=markup)
-            
-        elif call.data == "stats":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
-            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="📈 *Skuteczność algorytmu: 89.2%*", parse_mode="Markdown", reply_markup=markup)
-            
-        elif call.data == "back_to_menu":
-            markup = types.InlineKeyboardMarkup(row_width=1)
-            markup.add(
-                types.InlineKeyboardButton("🔥 Betclic / Superbet VIP Hub", callback_data="betclic_hub"),
-                types.InlineKeyboardButton("💡 Generator Kuponu AKO", callback_data="check_slip"),
-                types.InlineKeyboardButton("📈 Skuteczność Algorytmu", callback_data="stats")
-            )
-            bot.edit_message_text(chat_id=chat_id, message_id=message_id, text="🤖 *VIP Bet by Hrabia | REAL LIVE ENGINE* 🤖", parse_mode="Markdown", reply_markup=markup)
-    except Exception as e:
-        print(f"Callback Error: {e}")
-
 if __name__ == "__main__":
-    print("Bot ruszył pomyślnie...")
+    print("Telegram Mini App Bot ruszył pomyślnie...")
     bot.remove_webhook()
     bot.polling(none_stop=True, interval=1)
