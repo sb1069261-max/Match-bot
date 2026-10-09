@@ -1,8 +1,8 @@
 import os
+import threading
 import telebot
 from flask import Flask
 
-# Pobranie tokena z automatycznym usunięciem spacji i enterów
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if TOKEN:
     TOKEN = TOKEN.strip()
@@ -20,18 +20,21 @@ def handle_command(message):
     )
 
 
-# Obsługa wiadomości tekstowych / innych komend w grupach i czatach prywatnych
-@bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
-    # Tutaj działa reszta logiki z dzisiejszego dnia
-    pass
-
-
 @app.route("/")
 def index():
     return "Bot is running!"
 
 
+def run_bot():
+    # Uruchomienie nasłuchu wiadomości (polling) w tle
+    bot.infinity_polling()
+
+
 if __name__ == "__main__":
-    # Uruchomienie bota w tle lub standardowe webhooki/polling w zależności od konfiguracji Render
+    # Uruchomienie wątku z botem Telegrama
+    t = threading.Thread(target=run_bot)
+    t.daemon = True
+    t.start()
+
+    # Uruchomienie serwera Flask dla Rendera
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
