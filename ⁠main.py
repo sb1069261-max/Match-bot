@@ -2,13 +2,44 @@ import os
 import telebot
 from telebot import types
 
-# Twój token bota
+# Twój token bota i nazwa grupy z Telegrama
 TOKEN = '8921204127:AAE2_zQMJ7Q9f2HckqmEnSAQmja4pkmBC3w'
+CHANNEL_USERNAME = '@Bot_vip'  # Nazwa grupy ze zrzutu ekranu
+
 bot = telebot.TeleBot(TOKEN)
 
-# Start / Menu główne (wygląda jak aplikacja)
+# Funkcja sprawdzająca czy użytkownik jest członkiem grupy
+def is_user_in_channel(user_id):
+    try:
+        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+        return False
+    except Exception as e:
+        print(f"Błąd sprawdzania subskrypcji: {e}")
+        return False
+
+# Start / Menu główne z zabezpieczeniem
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
+    user_id = message.from_user.id
+    
+    if not is_user_in_channel(user_id):
+        markup = types.InlineKeyboardMarkup()
+        btn_channel = types.InlineKeyboardButton("📢 Dołącz do grupy Bot-vip", url="https://t.me/Bot_vip")
+        btn_check = types.InlineKeyboardButton("🔄 Sprawdź ponownie", callback_data="check_subscription")
+        markup.add(btn_channel, btn_check)
+        
+        bot.send_message(
+            message.chat.id,
+            "⛔ *Brak dostępu!*\n\n"
+            "Musisz być członkiem grupy *Bot-vip*, aby korzystać z tego bota analitycznego.",
+            parse_mode="Markdown",
+            reply_markup=markup
+        )
+        return
+
+    # Menu główne dla zweryfikowanego użytkownika
     banner_url = "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000&auto=format&fit=crop"
     
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -25,9 +56,21 @@ def send_welcome(message):
     
     bot.send_photo(message.chat.id, banner_url, caption=caption, parse_mode="Markdown", reply_markup=markup)
 
-# Obsługa kliknięć w przyciski (interfejs aplikacji)
+# Obsługa kliknięć w przyciski
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
+    user_id = call.from_user.id
+    
+    if call.data == "check_subscription":
+        if is_user_in_channel(user_id):
+            bot.answer_callback_query(call.id, "Dziękujemy! Uzyskałeś dostęp.")
+            fake_message = call.message
+            fake_message.from_user = call.from_user
+            send_welcome(fake_message)
+        else:
+            bot.answer_callback_query(call.id, "Nadal nie dołączyłeś do grupy!", show_alert=True)
+        return
+
     try:
         if call.data == "analyze_menu":
             markup = types.InlineKeyboardMarkup(row_width=2)
