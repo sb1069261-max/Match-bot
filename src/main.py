@@ -195,11 +195,15 @@ def callback_query(call):
             markup.add(types.InlineKeyboardButton("🏠 Menu główne", callback_data="back_to_menu"))
             
             try:
-                bot.delete_message(chat_id, message_id)
-            except:
-                pass
-                
-            bot.send_message(chat_id, analysis_text, parse_mode="Markdown", reply_markup=markup)
+                bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=analysis_text,
+                    parse_mode="Markdown",
+                    reply_markup=markup
+                )
+            except Exception as edit_err:
+                print(f"Edit msg error (Ignored): {edit_err}")
             
         elif call.data == "check_slip":
             markup = types.InlineKeyboardMarkup()
