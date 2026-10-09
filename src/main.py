@@ -25,7 +25,45 @@ FOOTBALL_API_KEY = '5b93bf93f3ef419bbf9f89396cb08ebc'
 
 bot = telebot.TeleBot(TOKEN)
 
-def get_today_matches():
+def fetch_match_details(match_id):
+    url = f"https://api.football-data.org/v4/matches/{match_id}"
+    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            m = response.json()
+            home = m.get('homeTeam', {}).get('name', 'Gospodarz')
+            away = m.get('awayTeam', {}).get('name', 'Gość')
+            competition = m.get('competition', {}).get('name', 'Rozgrywki')
+            status = m.get('status', 'SCHEDULED')
+            
+            score = m.get('score', {}) or {}
+            reg = score.get('regularTime', {}) or {}
+            ft = score.get('fullTime', {}) or {}
+            ht = score.get('halfTime', {}) or {}
+            
+            hg = reg.get('home') if reg.get('home') is not None else (ft.get('home') if ft.get('home') is not None else ht.get('home'))
+            ag = reg.get('away') if reg.get('away') is not None else (ft.get('away') if ft.get('away') is not None else ht.get('away'))
+            
+            return {
+                "home": home,
+                "away": away,
+                "competition": competition,
+                "status": status,
+                "h_goals": hg if hg is not None else 0,
+                "a_goals": ag if ag is not None else 0
+            }
+    except Exception as e:
+        print(f"Detail fetch error: {e}")
+    
+    # Awaryjne szukanie z listy, jeśli szczegółowy endpoint zawiedzie
+    matches = get_today_matches_raw()
+    for m in matches:
+        if m["id"] == str(match_id):
+            return m
+    return None
+
+def get_today_matches_raw():
     url = "https://api.football-data.org/v4/matches"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -38,13 +76,21 @@ def get_today_matches():
             data = response.json()
             matches = data.get("matches", [])
             result = []
-            for m in matches[:8]:
+            for m in matches:
                 home = m['homeTeam']['name']
                 away = m['awayTeam']['name']
                 competition = m['competition']['name']
-                match_id = m['id']
+                match_id = str(m['id'])
                 status = m['status']
                 
+                score = m.get('score', {}) or {}
+                reg = score.get('regularTime', {}) or {}
+                ft = score.get('fullTime', {}) or {}
+                ht = score.get('halfTime', {}) or {}
+                
+                hg = reg.get('home') if reg.get('home') is not None else (ft.get('home') if ft.get('home') is not None else ht.get('home'))
+                ag = reg.get('away') if reg.get('away') is not None else (ft.get('away') if ft.get('away') is not None else ht.get('away'))
+
                 status_icon = "🕒"
                 if status in ["LIVE", "IN_PLAY", "PAUSED"]:
                     status_icon = "🔴 [NA ŻYWO]"
@@ -52,16 +98,18 @@ def get_today_matches():
                     status_icon = "✅ [ZAKOŃCZONY]"
 
                 result.append({
-                    "id": str(match_id),
+                    "id": match_id,
                     "home": home,
                     "away": away,
                     "competition": competition,
                     "status": status,
+                    "h_goals": hg if hg is not None else 0,
+                    "a_goals": ag if ag is not None else 0,
                     "text": f"{status_icon} {home} vs {away}"
                 })
             return result
     except Exception as e:
-        print(f"API Error: {e}")
+        print(f"List API Error: {e}")
     return []
 
 @bot.message_handler(commands=['start', 'menu'])
@@ -73,7 +121,7 @@ def send_welcome(message):
     markup.add(btn_analyze, btn_slip, btn_stats)
     
     text = (
-        "🤖 *PRO BET ANALYZER v3.2 (LIVE & VIP)* 🤖\n\n"
+        "🤖 *VIP Bet by Hrabia (LIVE & VIP)* 🤖\n\n"
         "System analityczny z obsługą na żywo gotowy do pracy.\n"
         "Wybierz opcję poniżej:"
     )
@@ -87,7 +135,7 @@ def callback_query(call):
         message_id = call.message.message_id
 
         if call.data == "analyze_menu":
-            matches = get_today_matches()
+            matches = get_today_matches_raw()[:8]
             markup = types.InlineKeyboardMarkup(row_width=1)
             
             if matches:
@@ -108,39 +156,24 @@ def callback_query(call):
             
         elif call.data.startswith("match_"):
             match_id = call.data.replace("match_", "")
-            match_url = f"https://api.football-data.org/v4/matches/{match_id}"
-            headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+            match_data = fetch_match_details(match_id)
             
-            home, away, comp = "Gospodarz", "Gość", "Rozgrywki"
-            live_score_text = "🕒 Mecz oczekuje na start"
-            
-            try:
-                resp = requests.get(match_url, headers=headers)
-                if resp.status_code == 200:
-                    m_data = resp.json()
-                    home = m_data.get('homeTeam', {}).get('name', 'Gospodarz')
-                    away = m_data.get('awayTeam', {}).get('name', 'Gość')
-                    comp = m_data.get('competition', {}).get('name', 'Rozgrywki')
-                    status = m_data.get('status', 'SCHEDULED')
-                    score = m_data.get('score', {}) or {}
-                    
-                    full_time = score.get('fullTime', {}) or {}
-                    h_goals = full_time.get('home')
-                    a_goals = full_time.get('away')
-                    
-                    if status in ["LIVE", "IN_PLAY", "PAUSED"]:
-                        reg_time = score.get('regularTime', {}) or {}
-                        hg = reg_time.get('home') if reg_time.get('home') is not None else (h_goals if h_goals is not None else 0)
-                        ag = reg_time.get('away') if reg_time.get('away') is not None else (a_goals if a_goals is not None else 0)
-                        minute_info = f" (Status: {status})"
-                        live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}`{minute_info}"
-                    elif status == "FINISHED":
-                        live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {h_goals if h_goals is not None else 0} : {a_goals if a_goals is not None else 0} {away}`"
-                    else:
-                        match_date = m_data.get('utcDate', '').split('T')[0]
-                        live_score_text = f"🕒 *Status:* Zaplanowany na {match_date}"
-            except Exception as inner_err:
-                print(f"Match detail error: {inner_err}")
+            if match_data:
+                home = match_data["home"]
+                away = match_data["away"]
+                comp = match_data["competition"]
+                status = match_data["status"]
+                hg = match_data["h_goals"]
+                ag = match_data["a_goals"]
+            else:
+                home, away, comp, status, hg, ag = "Gospodarz", "Gość", "Rozgrywki", "SCHEDULED", 0, 0
+
+            if status in ["LIVE", "IN_PLAY", "PAUSED"]:
+                live_score_text = f"🔴 *WYNIK NA ŻYWO:* `{home} {hg} : {ag} {away}` (W trakcie gry)"
+            elif status == "FINISHED":
+                live_score_text = f"✅ *WYNIK KOŃCOWY:* `{home} {hg} : {ag} {away}`"
+            else:
+                live_score_text = f"🕒 *Status:* Mecz jeszcze się nie rozpoczął"
 
             seed = hash(home + away)
             random.seed(seed)
@@ -195,7 +228,7 @@ def callback_query(call):
                     reply_markup=markup
                 )
             except Exception as edit_err:
-                print(f"Edit error: {edit_err}")
+                print(f"Edit error (Ignored): {edit_err}")
             
         elif call.data == "check_slip":
             markup = types.InlineKeyboardMarkup()
