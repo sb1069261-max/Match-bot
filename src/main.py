@@ -2,8 +2,8 @@ import os
 import telebot
 from telebot import types
 
-# Pobieranie tokenu ze zmiennych środowiskowych Renderu
-TOKEN = os.environ.get("BOT_TOKEN")
+# Twój token bota wklejony bezpośrednio
+TOKEN = '8921204127:AAE2_zQMJ7Q9f2HckqmEnSAQmja4pkmBC3w'
 CHANNEL_USERNAME = '@Bot_vip'  # Nazwa grupy
 
 bot = telebot.TeleBot(TOKEN)
