@@ -4,7 +4,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
 
-# Prosty serwer HTTP dla Render (wymóg portu)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -16,16 +15,14 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
 
-# Uruchomienie serwera HTTP w tle
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# Twój najnowszy token bota w cudzysłowie
-TOKEN = 8921204127:AAEhREAu09w-xlbY8JZjKXyGul3ctl3RRS4
+# Token w cudzysłowie
+TOKEN = '8921204127:AAEhREAu09w-xlbY8JZjKXyGul3ct3RRS4'
 CHANNEL_USERNAME = '@Bot_vip_OG'
 
 bot = telebot.TeleBot(TOKEN)
 
-# Menu główne (bramka testowo pominięta)
 @bot.message_handler(commands=['start', 'menu'])
 def send_welcome(message):
     banner_url = "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=1000&auto=format&fit=crop"
@@ -44,7 +41,6 @@ def send_welcome(message):
     
     bot.send_photo(message.chat.id, banner_url, caption=caption, parse_mode="Markdown", reply_markup=markup)
 
-# Obsługa przycisków
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     try:
@@ -127,7 +123,6 @@ def callback_query(call):
     except Exception as e:
         print(f"Błąd: {e}")
 
-# Start bota z czyszczeniem starych sesji zapobiegającym błędowi 409
 if __name__ == "__main__":
     print("Bot ruszył...")
     bot.remove_webhook()
